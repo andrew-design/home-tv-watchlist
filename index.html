@@ -31,9 +31,33 @@ h2{font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.08
 h3{font-size:15px;margin:16px 0 0}
 #msg{position:fixed;left:16px;right:16px;bottom:20px;background:#26304a;border-radius:12px;padding:12px;text-align:center;opacity:0;transition:.25s;pointer-events:none}
 #msg.show{opacity:1}
+
+.tabs{display:flex;gap:6px;margin:0 0 14px;background:var(--card);padding:4px;border-radius:14px}
+.tabs button{flex:1;border:0;background:none;color:var(--muted);padding:10px 0;border-radius:11px;font-size:15px;font-weight:600}
+.tabs button.on{background:#26304a;color:var(--text)}
+.deck{position:relative;height:min(68vh,560px);margin-top:6px;touch-action:pan-y}
+.sw{position:absolute;inset:0;border-radius:20px;overflow:hidden;background:var(--card);box-shadow:0 8px 28px #0008;transition:transform .25s,opacity .25s;user-select:none}
+.sw img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
+.sw .info{position:absolute;left:0;right:0;bottom:0;padding:60px 16px 16px;background:linear-gradient(transparent,#000d 60%)}
+.sw .info b{font-size:22px;display:block}.sw .info small{color:#cdd5e2;display:block;margin-top:2px}
+.sw .info p{margin:8px 0 0;font-size:13px;color:#cdd5e2;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.stamp{position:absolute;top:22px;padding:4px 14px;border:3px solid;border-radius:10px;font-weight:800;font-size:26px;opacity:0;transform:rotate(-8deg)}
+.stamp.want{left:18px;color:#5bf0a0;border-color:#5bf0a0}.stamp.skip{right:18px;color:#ff6b81;border-color:#ff6b81;transform:rotate(8deg)}
+.acts{display:flex;justify-content:center;gap:28px;margin-top:16px}
+.acts button{width:68px;height:68px;border-radius:50%;border:2px solid #2b3650;background:var(--card);font-size:28px}
+.acts .no{color:#ff6b81}.acts .yes{color:#5bf0a0}
+.match{position:fixed;inset:0;background:#0f1420ee;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px;z-index:5}
+.match.show{display:flex}.match h2{font-size:30px;color:var(--text);text-transform:none;letter-spacing:0;margin:0 0 6px}.match img{width:150px;border-radius:12px;margin:14px 0}
+.big{width:100%;padding:16px;font-size:18px;margin-top:14px}
+.pick{margin-top:16px;background:var(--card);border-radius:18px;overflow:hidden}.pick img{width:100%;max-height:420px;object-fit:cover;display:block}
+.pick .body{padding:14px}.pick h3{margin:0;font-size:22px}.pick p{color:#cdd5e2;font-size:14px}
 </style></head><body>
 <h1>⭐ Our Watchlist</h1>
 <div class="who" id="who"></div>
+<div class="tabs" id="tabs"><button data-t="list" class="on">List</button><button data-t="swipe">Swipe</button><button data-t="tonight">Tonight</button></div>
+<div id="tab-swipe" style="display:none"><div class="deck" id="deck"></div><div class="acts"><button class="no" id="noBtn" aria-label="Skip">✕</button><button class="yes" id="yesBtn" aria-label="Want">♥</button></div></div>
+<div id="tab-tonight" style="display:none"><div class="chips" id="tkind"></div><button class="btn big" id="pickBtn">What should we watch?</button><div id="pickOut"></div></div>
+<div id="tab-list">
 <input type="search" id="q" placeholder="Search a show or movie to add…" autocomplete="off">
 <div id="results"></div>
 <h2>On the list</h2>
@@ -42,6 +66,8 @@ h3{font-size:15px;margin:16px 0 0}
 <div id="list"></div>
 <h2>Suggested for you</h2>
 <div id="sugs"><p style="color:var(--muted)">Finding ideas…</p></div>
+</div>
+<div class="match" id="match"></div>
 <div id="msg"></div>
 <script>
 const API = 'https://jwbzbxzgpkdyabysjmbj.supabase.co/functions/v1/watchlist';
@@ -60,7 +86,7 @@ async function call(action, body){
 }
 function drawWho(){
   $('who').innerHTML = ['Andy','Brittany'].map(n=>'<button class="'+(me===n?'on':'')+'" data-n="'+n+'">'+n+'</button>').join('');
-  $('who').querySelectorAll('button').forEach(b=>b.onclick=()=>{ me=b.dataset.n; localStorage.setItem('wl_me',me); drawWho(); drawList(); });
+  $('who').querySelectorAll('button').forEach(b=>b.onclick=()=>{ me=b.dataset.n; localStorage.setItem('wl_me',me); drawWho(); drawList(); if(tab==='swipe') loadDeck(); });
 }
 let items = [], type = 'all', genre = '';
 function drawChips(){
@@ -95,5 +121,61 @@ let timer; $('q').oninput = () => { clearTimeout(timer); timer = setTimeout(asyn
   $('results').innerHTML = res.map((x,i)=>'<div class="row">'+(x.poster?'<img src="'+x.poster+'">':'<div class="ph"></div>')+'<div class="t"><b>'+esc(x.title)+'</b><small>'+esc(x.year)+' · '+(x.media_type==='tv'?'Show':'Movie')+'</small></div><button class="btn" data-i="'+i+'">Add</button></div>').join('');
   $('results').querySelectorAll('.btn').forEach(b=>b.onclick=async()=>{ if(!me) return toast('Pick Andy or Brittany first'); const x=res[+b.dataset.i]; b.disabled=true; const a=await call('add',{tmdb_id:x.tmdb_id,media_type:x.media_type,by:me}); toast(a.status==='exists'?'Already on the list':'Added '+x.title); $('q').value=''; $('results').innerHTML=''; load(); loadSugs(); });
 }, 350); };
+
+// ---- tabs
+let tab='list';
+function showTab(t){ tab=t; ['list','swipe','tonight'].forEach(k=>$('tab-'+k).style.display=k===t?'':'none');
+  $('tabs').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  if(t==='swipe') loadDeck(); if(t==='tonight') drawTonight(); }
+$('tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>showTab(b.dataset.t));
+// ---- swipe
+let deck=[], deckFor='';
+async function loadDeck(){
+  if(!me){ $('deck').innerHTML='<p style="color:var(--muted)">Pick Andy or Brittany above first.</p>'; return; }
+  if(deckFor===me && deck.length) return drawDeck();
+  $('deck').innerHTML='<p style="color:var(--muted)">Finding things to swipe\u2026</p>';
+  const r=await call('deck&who='+encodeURIComponent(me)); deck=r.cards||[]; deckFor=me; drawDeck();
+}
+function drawDeck(){
+  const c=deck[0];
+  if(!c){ $('deck').innerHTML='<p style="color:var(--muted)">That is everything for now. Check back later for new ideas.</p>'; return; }
+  const who=(c.wanted_by||[]).filter(n=>n!==me);
+  const note=c.source==='list'?(who.length?esc(who.join(' and '))+' wants this':'On our list'):esc(c.reason||'Suggested');
+  $('deck').innerHTML='<div class="sw" id="top">'+(c.poster?'<img src="'+c.poster+'">':'')+'<div class="stamp want">WANT</div><div class="stamp skip">SKIP</div><div class="info"><b>'+esc(c.title)+'</b><small>'+esc(c.year)+' \u00b7 '+(c.media_type==='tv'?'Show':'Movie')+' \u00b7 '+note+'</small><p>'+esc(c.overview||'')+'</p></div></div>';
+  const el=$('top'); let x0=null,dx=0;
+  el.onpointerdown=e=>{ x0=e.clientX; el.setPointerCapture(e.pointerId); el.style.transition='none'; };
+  el.onpointermove=e=>{ if(x0===null) return; dx=e.clientX-x0; el.style.transform='translateX('+dx+'px) rotate('+dx/18+'deg)';
+    el.querySelector('.want').style.opacity=Math.max(0,Math.min(1,dx/90)); el.querySelector('.skip').style.opacity=Math.max(0,Math.min(1,-dx/90)); };
+  el.onpointerup=()=>{ if(x0===null) return; x0=null; el.style.transition=''; if(dx>90) vote('want'); else if(dx<-90) vote('skip'); else { el.style.transform=''; el.querySelectorAll('.stamp').forEach(s=>s.style.opacity=0); } dx=0; };
+}
+let voting=false;
+async function vote(v){
+  const c=deck[0]; if(!c||voting) return; voting=true;
+  const el=$('top'); if(el){ el.style.transition='transform .25s,opacity .25s'; el.style.transform='translateX('+(v==='want'?'':'-')+'120vw) rotate('+(v==='want'?18:-18)+'deg)'; el.style.opacity=0; }
+  deck.shift();
+  const p=call('swipe',{who:me,tmdb_id:c.tmdb_id,media_type:c.media_type,vote:v});
+  setTimeout(drawDeck,230);
+  const r=await p.catch(()=>({})); voting=false;
+  if(v==='want'){ load(); if(r.match) showMatch(c); }
+}
+function showMatch(c){ const m=$('match'); m.innerHTML='<h2>\ud83c\udf89 You both want this!</h2>'+(c.poster?'<img src="'+c.poster+'">':'')+'<b style="font-size:20px">'+esc(c.title)+'</b><button class="btn big" id="mok">Keep swiping</button>'; m.classList.add('show'); $('mok').onclick=()=>m.classList.remove('show'); }
+$('noBtn').onclick=()=>vote('skip'); $('yesBtn').onclick=()=>vote('want');
+// ---- tonight
+let tkind='any', skipIds=[];
+function drawTonight(){
+  const T=[['any','Anything'],['movie','Movie'],['tv','Show']];
+  $('tkind').innerHTML=T.map(([k,l])=>'<button class="chip '+(tkind===k?'on':'')+'" data-k="'+k+'">'+l+'</button>').join('');
+  $('tkind').querySelectorAll('.chip').forEach(b=>b.onclick=()=>{ tkind=b.dataset.k; skipIds=[]; drawTonight(); });
+}
+async function pickTonight(){
+  $('pickOut').innerHTML='<p style="color:var(--muted)">Picking\u2026</p>';
+  const r=await call('tonight&type='+tkind+'&skip='+skipIds.join(',')); const i=r.item;
+  if(!i){ $('pickOut').innerHTML='<p style="color:var(--muted)">'+(skipIds.length?'That is all of them. Tap again to start over.':'Nothing to pick from yet. Swipe a few titles first.')+'</p>'; skipIds=[]; return; }
+  const both=i.hearts.includes('Andy')&&i.hearts.includes('Brittany');
+  $('pickOut').innerHTML='<div class="pick">'+(i.poster?'<img src="'+i.poster+'">':'')+'<div class="body"><h3>'+esc(i.title)+'</h3><small style="color:var(--muted)">'+esc(i.year)+' \u00b7 '+(i.media_type==='tv'?'Show':'Movie')+(both?' \u00b7 you both want this':'')+'</small><div>'+(i.providers||[]).map(p=>'<span class="badge" style="background:#1f4d49">'+esc(p)+'</span>').join('')+'</div><p>'+esc(i.overview||'')+'</p><button class="btn ghost big" id="nope">Not this one</button></div></div>';
+  $('nope').onclick=()=>{ skipIds.push(i.id); pickTonight(); };
+}
+$('pickBtn').onclick=()=>{ skipIds=[]; pickTonight(); };
+
 drawWho(); load(); loadSugs();
 </script></body></html>
