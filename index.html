@@ -51,11 +51,22 @@ h3{font-size:15px;margin:16px 0 0}
 .big{width:100%;padding:16px;font-size:18px;margin-top:14px}
 .pick{margin-top:16px;background:var(--card);border-radius:18px;overflow:hidden}.pick img{width:100%;max-height:420px;object-fit:cover;display:block}
 .pick .body{padding:14px}.pick h3{margin:0;font-size:22px}.pick p{color:#cdd5e2;font-size:14px}
+.sw{touch-action:none}
+.acts{gap:18px;align-items:flex-start}.acts div{text-align:center;color:var(--muted);font-size:12px}.acts div button{display:block;margin:0 auto 4px}
+.acts .mid{color:var(--muted);font-size:24px;width:56px;height:56px;margin-top:6px}
+.pill{position:absolute;right:12px;top:12px;border:0;border-radius:999px;background:#000a;color:#fff;padding:8px 14px;font-size:14px;font-weight:700;z-index:2}
+.sheet{position:fixed;inset:0;background:#0f1420f2;overflow-y:auto;display:none;z-index:6;padding:max(16px,env(safe-area-inset-top)) 16px 40px}
+.sheet.show{display:block}.sheet .x{position:sticky;top:0;float:right;border:0;background:#26304a;color:#fff;border-radius:50%;width:38px;height:38px;font-size:18px;z-index:2}
+.sheet h2{font-size:26px;text-transform:none;letter-spacing:0;color:var(--text);margin:6px 0 2px}.sheet .meta{color:var(--muted);font-size:14px}
+.sheet .tag{font-style:italic;color:#cdd5e2;margin:10px 0 0}.sheet p{color:#e3e8f1;font-size:15px}
+.vid{position:relative;padding-top:56.25%;margin:14px 0;border-radius:14px;overflow:hidden;background:#000}.vid iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.row[data-ix]{cursor:pointer}
 </style></head><body>
 <h1>⭐ Our Watchlist</h1>
 <div class="who" id="who"></div>
 <div class="tabs" id="tabs"><button data-t="list" class="on">List</button><button data-t="swipe">Swipe</button><button data-t="tonight">Tonight</button></div>
-<div id="tab-swipe" style="display:none"><div class="deck" id="deck"></div><div class="acts"><button class="no" id="noBtn" aria-label="Skip">✕</button><button class="yes" id="yesBtn" aria-label="Want">♥</button></div></div>
+<div id="tab-swipe" style="display:none"><div class="deck" id="deck"></div><div class="acts"><div><button class="no" id="noBtn" aria-label="No">✕</button>No</div><div><button class="mid" id="midBtn" aria-label="Skip for now">⏭</button>Skip</div><div><button class="yes" id="yesBtn" aria-label="Want">♥</button>Want</div></div>
+<p style="text-align:center;color:var(--muted);font-size:12px;margin:10px 0 0">Swipe right = want \u00b7 left = no thanks \u00b7 up = skip for now \u00b7 tap = trailer and details</p></div>
 <div id="tab-tonight" style="display:none"><div class="chips" id="tkind"></div><button class="btn big" id="pickBtn">What should we watch?</button><div id="pickOut"></div></div>
 <div id="tab-list">
 <input type="search" id="q" placeholder="Search a show or movie to add…" autocomplete="off">
@@ -68,6 +79,7 @@ h3{font-size:15px;margin:16px 0 0}
 <div id="sugs"><p style="color:var(--muted)">Finding ideas…</p></div>
 </div>
 <div class="match" id="match"></div>
+<div class="sheet" id="sheet"></div>
 <div id="msg"></div>
 <script>
 const API = 'https://jwbzbxzgpkdyabysjmbj.supabase.co/functions/v1/watchlist';
@@ -88,7 +100,7 @@ function drawWho(){
   $('who').innerHTML = ['Andy','Brittany'].map(n=>'<button class="'+(me===n?'on':'')+'" data-n="'+n+'">'+n+'</button>').join('');
   $('who').querySelectorAll('button').forEach(b=>b.onclick=()=>{ me=b.dataset.n; localStorage.setItem('wl_me',me); drawWho(); drawList(); if(tab==='swipe') loadDeck(); });
 }
-let items = [], type = 'all', genre = '';
+let items = [], type = 'all', genre = '', lastShown = [];
 function drawChips(){
   const T = [['all','All'],['movie','Movies'],['tv','Shows']];
   $('types').innerHTML = T.map(([k,l])=>'<button class="chip '+(type===k?'on':'')+'" data-k="'+k+'">'+l+'</button>').join('');
@@ -99,11 +111,12 @@ function drawChips(){
   $('genres').querySelectorAll('.chip').forEach(b=>b.onclick=()=>{ genre=b.dataset.g; drawChips(); drawList(); });
 }
 function drawList(){
-  const shown = items.filter(i=>(type==='all'||i.media_type===type)&&(!genre||(i.genres||[]).includes(genre)));
-  $('list').innerHTML = shown.length ? shown.map(i=>'<div class="row">'+(i.poster?'<img src="'+i.poster+'">':'<div class="ph"></div>')+
+  const shown = lastShown = items.filter(i=>(type==='all'||i.media_type===type)&&(!genre||(i.genres||[]).includes(genre)));
+  $('list').innerHTML = shown.length ? shown.map((i,ix)=>'<div class="row" data-ix="'+ix+'">'+(i.poster?'<img src="'+i.poster+'">':'<div class="ph"></div>')+
     '<div class="t"><b>'+esc(i.title)+'</b><small>'+esc(i.year)+' \u00b7 '+(i.media_type==='tv'?'Show':'Movie')+' \u00b7 added by '+esc(i.added_by)+'</small><div>'+
     (i.genres||[]).slice(0,2).map(g=>'<span class="badge">'+esc(g)+'</span>').join('')+(i.providers||[]).map(p=>'<span class="badge" style="background:#1f4d49">'+esc(p)+'</span>').join('')+'</div></div>'+
     '<button class="heart '+(i.hearts.includes(me)?'on':'')+'" data-id="'+i.id+'">'+(i.hearts.includes(me)?'\u2665':'\u2661')+' <small>'+i.hearts.length+'</small></button></div>').join('') : '<p style="color:var(--muted)">'+(items.length?'Nothing matches that filter.':'Nothing yet. Search above or add from the suggestions below.')+'</p>';
+  $('list').querySelectorAll('.row[data-ix]').forEach(r=>r.onclick=e=>{ if(e.target.closest('.heart')) return; openDetails(lastShown[+r.dataset.ix],false); });
   $('list').querySelectorAll('.heart').forEach(b=>b.onclick=async()=>{ if(!me) return toast('Pick Andy or Brittany first'); await call('heart',{id:+b.dataset.id,who:me}); load(); });
 }
 let sugRows = [];
@@ -122,6 +135,20 @@ let timer; $('q').oninput = () => { clearTimeout(timer); timer = setTimeout(asyn
   $('results').querySelectorAll('.btn').forEach(b=>b.onclick=async()=>{ if(!me) return toast('Pick Andy or Brittany first'); const x=res[+b.dataset.i]; b.disabled=true; const a=await call('add',{tmdb_id:x.tmdb_id,media_type:x.media_type,by:me}); toast(a.status==='exists'?'Already on the list':'Added '+x.title); $('q').value=''; $('results').innerHTML=''; load(); loadSugs(); });
 }, 350); };
 
+
+// ---- details + trailer
+async function openDetails(c,play){
+  const sh=$('sheet'); sh.classList.add('show'); document.body.style.overflow='hidden';
+  sh.innerHTML='<button class="x" id="sx">\u2715</button><p style="color:var(--muted)">Loading\u2026</p>'; $('sx').onclick=closeDetails;
+  const d=await call('details&media_type='+c.media_type+'&tmdb_id='+c.tmdb_id).catch(()=>({}));
+  if(d.error||!d.title){ sh.innerHTML='<button class="x" id="sx">\u2715</button><p style="color:var(--muted)">Cannot load details right now.</p>'; $('sx').onclick=closeDetails; return; }
+  const bits=[d.year,d.media_type==='tv'?'Show'+(d.seasons?' \u00b7 '+d.seasons+' season'+(d.seasons>1?'s':''):''):'Movie',d.minutes?(d.media_type==='tv'?d.minutes+' min/ep':Math.floor(d.minutes/60)+'h '+d.minutes%60+'m'):'',d.rating?'\u2605 '+d.rating:''].filter(Boolean);
+  sh.innerHTML='<button class="x" id="sx">\u2715</button><h2>'+esc(d.title)+'</h2><div class="meta">'+esc(bits.join(' \u00b7 '))+'</div>'+
+    (d.trailer?'<div class="vid"><iframe src="https://www.youtube-nocookie.com/embed/'+encodeURIComponent(d.trailer)+'?rel=0&playsinline=1'+(play?'&autoplay=1':'')+'" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div><a href="https://www.youtube.com/watch?v='+encodeURIComponent(d.trailer)+'" target="_blank" rel="noopener" style="color:var(--accent);font-size:13px">Open on YouTube</a>':'<p style="color:var(--muted)">No trailer found for this one.</p>')+
+    (d.tagline?'<p class="tag">'+esc(d.tagline)+'</p>':'')+'<p>'+esc(d.overview||'No description yet.')+'</p><div>'+(d.genres||[]).map(g=>'<span class="badge">'+esc(g)+'</span>').join('')+(d.providers||[]).map(p=>'<span class="badge" style="background:#1f4d49">'+esc(p)+'</span>').join('')+'</div>';
+  $('sx').onclick=closeDetails;
+}
+function closeDetails(){ const sh=$('sheet'); sh.classList.remove('show'); sh.innerHTML=''; document.body.style.overflow=''; }
 // ---- tabs
 let tab='list';
 function showTab(t){ tab=t; ['list','swipe','tonight'].forEach(k=>$('tab-'+k).style.display=k===t?'':'none');
@@ -141,13 +168,19 @@ function drawDeck(){
   if(!c){ $('deck').innerHTML='<p style="color:var(--muted)">That is everything for now. Check back later for new ideas.</p>'; return; }
   const who=(c.wanted_by||[]).filter(n=>n!==me);
   const note=c.source==='list'?(who.length?esc(who.join(' and '))+' wants this':'On our list'):esc(c.reason||'Suggested');
-  $('deck').innerHTML='<div class="sw" id="top">'+(c.poster?'<img src="'+c.poster+'">':'')+'<div class="stamp want">WANT</div><div class="stamp skip">SKIP</div><div class="info"><b>'+esc(c.title)+'</b><small>'+esc(c.year)+' \u00b7 '+(c.media_type==='tv'?'Show':'Movie')+' \u00b7 '+note+'</small><p>'+esc(c.overview||'')+'</p></div></div>';
-  const el=$('top'); let x0=null,dx=0;
-  el.onpointerdown=e=>{ x0=e.clientX; el.setPointerCapture(e.pointerId); el.style.transition='none'; };
-  el.onpointermove=e=>{ if(x0===null) return; dx=e.clientX-x0; el.style.transform='translateX('+dx+'px) rotate('+dx/18+'deg)';
+  $('deck').innerHTML='<div class="sw" id="top">'+(c.poster?'<img src="'+c.poster+'">':'')+'<button class="pill" id="trl">\u25b6 Trailer</button><div class="stamp want">WANT</div><div class="stamp skip">NO</div><div class="info"><b>'+esc(c.title)+'</b><small>'+esc(c.year)+' \u00b7 '+(c.media_type==='tv'?'Show':'Movie')+' \u00b7 '+note+'</small><p>'+esc(c.overview||'')+'</p></div></div>';
+  const el=$('top'); let x0=null,y0=0,dx=0,dy=0;
+  $('trl').onpointerdown=e=>e.stopPropagation(); $('trl').onclick=()=>openDetails(c,true);
+  el.onpointerdown=e=>{ x0=e.clientX; y0=e.clientY; dx=dy=0; el.setPointerCapture(e.pointerId); el.style.transition='none'; };
+  el.onpointermove=e=>{ if(x0===null) return; dx=e.clientX-x0; dy=e.clientY-y0; el.style.transform='translate('+dx+'px,'+Math.min(dy,0)+'px) rotate('+dx/18+'deg)';
     el.querySelector('.want').style.opacity=Math.max(0,Math.min(1,dx/90)); el.querySelector('.skip').style.opacity=Math.max(0,Math.min(1,-dx/90)); };
-  el.onpointerup=()=>{ if(x0===null) return; x0=null; el.style.transition=''; if(dx>90) vote('want'); else if(dx<-90) vote('skip'); else { el.style.transform=''; el.querySelectorAll('.stamp').forEach(s=>s.style.opacity=0); } dx=0; };
+  el.onpointerup=()=>{ if(x0===null) return; x0=null; el.style.transition='';
+    if(Math.abs(dx)<8&&Math.abs(dy)<8){ el.style.transform=''; openDetails(c,false); }
+    else if(dx>90) vote('want'); else if(dx<-90) vote('skip'); else if(dy<-110) later();
+    else { el.style.transform=''; el.querySelectorAll('.stamp').forEach(s=>s.style.opacity=0); } dx=dy=0; };
 }
+// Skip for now: no opinion, so nothing is saved and the title goes to the back of the deck.
+function later(){ const c=deck.shift(); if(!c) return; const el=$('top'); if(el){ el.style.transition='transform .25s,opacity .25s'; el.style.transform='translateY(-120vh)'; el.style.opacity=0; } deck.push(c); setTimeout(drawDeck,230); }
 let voting=false;
 async function vote(v){
   const c=deck[0]; if(!c||voting) return; voting=true;
@@ -159,7 +192,7 @@ async function vote(v){
   if(v==='want'){ load(); if(r.match) showMatch(c); }
 }
 function showMatch(c){ const m=$('match'); m.innerHTML='<h2>\ud83c\udf89 You both want this!</h2>'+(c.poster?'<img src="'+c.poster+'">':'')+'<b style="font-size:20px">'+esc(c.title)+'</b><button class="btn big" id="mok">Keep swiping</button>'; m.classList.add('show'); $('mok').onclick=()=>m.classList.remove('show'); }
-$('noBtn').onclick=()=>vote('skip'); $('yesBtn').onclick=()=>vote('want');
+$('noBtn').onclick=()=>vote('skip'); $('midBtn').onclick=later; $('yesBtn').onclick=()=>vote('want');
 // ---- tonight
 let tkind='any', skipIds=[];
 function drawTonight(){
