@@ -58,7 +58,7 @@ function drawList(){
     '<button class="heart '+(i.hearts.includes(me)?'on':'')+'" data-id="'+i.id+'">'+(i.hearts.includes(me)?'♥':'♡')+' <small>'+i.hearts.length+'</small></button></div>').join('') : '<p style="color:var(--muted)">Nothing yet. Search above to add the first one.</p>';
   $('list').querySelectorAll('.heart').forEach(b=>b.onclick=async()=>{ if(!me) return toast('Pick Andy or Brittany first'); await call('heart',{id:+b.dataset.id,who:me}); load(); });
 }
-async function load(){ const r = await call('list'); if (r.error) { $('list').innerHTML='<p style="color:var(--muted)">Can\\'t load the list ('+esc(r.error)+'). Open the link Claude gave you again.</p>'; return; } items=r.items; drawList(); }
+async function load(){ const r = await call('list'); if (r.error) { $('list').innerHTML='<p style="color:var(--muted)">Cannot load the list ('+esc(r.error)+'). Open the link Claude gave you again.</p>'; return; } items=r.items; drawList(); }
 let timer; $('q').oninput = () => { clearTimeout(timer); timer = setTimeout(async () => {
   const q = $('q').value.trim(); if (q.length<2) { $('results').innerHTML=''; return; }
   const r = await call('search&q='+encodeURIComponent(q)); const res = r.results||[];
