@@ -83,6 +83,7 @@ h3{font-size:15px;margin:16px 0 0}
 <div id="msg"></div>
 <script>
 const API = 'https://jwbzbxzgpkdyabysjmbj.supabase.co/functions/v1/watchlist';
+const TVAPI = 'https://jwbzbxzgpkdyabysjmbj.supabase.co/functions/v1/tv-remote';
 const params = new URLSearchParams(location.hash.slice(1) || location.search);
 if (params.get('k')) { localStorage.setItem('wl_k', params.get('k')); history.replaceState(null, '', location.pathname); }
 const K = localStorage.getItem('wl_k') || '';
@@ -138,6 +139,16 @@ let timer; $('q').oninput = () => { clearTimeout(timer); timer = setTimeout(asyn
 }, 350); };
 
 
+// ---- phone as remote: leaves a note the TV picks up within a few seconds
+async function sendToTv(t,btn){
+  if(!me) return toast('Pick Andy or Brittany first');
+  if(btn){ btn.disabled=true; btn.textContent='Sending\u2026'; }
+  try{
+    const r=await fetch(TVAPI,{method:'POST',headers:{'x-app-token':K,'Content-Type':'application/json'},body:JSON.stringify({action:'play',title:t.title,media_type:t.media_type,tmdb_id:t.tmdb_id,providers:t.providers||[],by:me})}).then(r=>r.json());
+    if(r.status!=='sent') throw new Error('x');
+    if(btn){ btn.textContent='Sent! Check the TV'; setTimeout(()=>{ btn.disabled=false; btn.textContent='\ud83d\udcfa Watch on TV'; },4000); }
+  }catch(e){ if(btn){ btn.disabled=false; btn.textContent='\ud83d\udcfa Watch on TV'; } toast('Could not reach the TV'); }
+}
 // ---- details + trailer
 async function openDetails(c,play){
   const sh=$('sheet'); sh.classList.add('show'); document.body.style.overflow='hidden';
@@ -147,8 +158,8 @@ async function openDetails(c,play){
   const bits=[d.year,d.media_type==='tv'?'Show'+(d.seasons?' \u00b7 '+d.seasons+' season'+(d.seasons>1?'s':''):''):'Movie',d.minutes?(d.media_type==='tv'?d.minutes+' min/ep':Math.floor(d.minutes/60)+'h '+d.minutes%60+'m'):'',d.rating?'\u2605 '+d.rating:''].filter(Boolean);
   sh.innerHTML='<button class="x" id="sx">\u2715</button><h2>'+esc(d.title)+'</h2><div class="meta">'+esc(bits.join(' \u00b7 '))+'</div>'+
     (d.trailer?'<div class="vid"><iframe src="https://www.youtube-nocookie.com/embed/'+encodeURIComponent(d.trailer)+'?rel=0&playsinline=1'+(play?'&autoplay=1':'')+'" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div><a href="https://www.youtube.com/watch?v='+encodeURIComponent(d.trailer)+'" target="_blank" rel="noopener" style="color:var(--accent);font-size:13px">Open on YouTube</a>':'<p style="color:var(--muted)">No trailer found for this one.</p>')+
-    (d.tagline?'<p class="tag">'+esc(d.tagline)+'</p>':'')+'<p>'+esc(d.overview||'No description yet.')+'</p><div>'+(d.genres||[]).map(g=>'<span class="badge">'+esc(g)+'</span>').join('')+(d.providers||[]).map(p=>'<span class="badge" style="background:#1f4d49">'+esc(p)+'</span>').join('')+'</div>';
-  $('sx').onclick=closeDetails;
+    '<button class="btn big" id="tvBtn">\ud83d\udcfa Watch on TV</button>'+(d.tagline?'<p class="tag">'+esc(d.tagline)+'</p>':'')+'<p>'+esc(d.overview||'No description yet.')+'</p><div>'+(d.genres||[]).map(g=>'<span class="badge">'+esc(g)+'</span>').join('')+(d.providers||[]).map(p=>'<span class="badge" style="background:#1f4d49">'+esc(p)+'</span>').join('')+'</div>';
+  $('sx').onclick=closeDetails; $('tvBtn').onclick=()=>sendToTv(d,$('tvBtn'));
 }
 function closeDetails(){ const sh=$('sheet'); sh.classList.remove('show'); sh.innerHTML=''; document.body.style.overflow=''; }
 // ---- tabs
@@ -207,7 +218,8 @@ async function pickTonight(){
   const r=await call('tonight&type='+tkind+'&skip='+skipIds.join(',')); const i=r.item;
   if(!i){ $('pickOut').innerHTML='<p style="color:var(--muted)">'+(skipIds.length?'That is all of them. Tap again to start over.':'Nothing to pick from yet. Swipe a few titles first.')+'</p>'; skipIds=[]; return; }
   const both=i.hearts.includes('Andy')&&i.hearts.includes('Brittany');
-  $('pickOut').innerHTML='<div class="pick">'+(i.poster?'<img src="'+i.poster+'">':'')+'<div class="body"><h3>'+esc(i.title)+'</h3><small style="color:var(--muted)">'+esc(i.year)+' \u00b7 '+(i.media_type==='tv'?'Show':'Movie')+(both?' \u00b7 you both want this':'')+'</small><div>'+(i.providers||[]).map(p=>'<span class="badge" style="background:#1f4d49">'+esc(p)+'</span>').join('')+'</div><p>'+esc(i.overview||'')+'</p><button class="btn ghost big" id="nope">Not this one</button></div></div>';
+  $('pickOut').innerHTML='<div class="pick">'+(i.poster?'<img src="'+i.poster+'">':'')+'<div class="body"><h3>'+esc(i.title)+'</h3><small style="color:var(--muted)">'+esc(i.year)+' \u00b7 '+(i.media_type==='tv'?'Show':'Movie')+(both?' \u00b7 you both want this':'')+'</small><div>'+(i.providers||[]).map(p=>'<span class="badge" style="background:#1f4d49">'+esc(p)+'</span>').join('')+'</div><p>'+esc(i.overview||'')+'</p><button class="btn big" id="tvPick">\ud83d\udcfa Watch on TV</button><button class="btn ghost big" id="nope">Not this one</button></div></div>';
+  $('tvPick').onclick=()=>sendToTv(i,$('tvPick'));
   $('nope').onclick=()=>{ skipIds.push(i.id); pickTonight(); };
 }
 $('pickBtn').onclick=()=>{ skipIds=[]; pickTonight(); };
