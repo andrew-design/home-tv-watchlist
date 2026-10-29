@@ -21,6 +21,14 @@ input[type=search]{width:100%;padding:14px;border-radius:14px;border:1px solid #
 .heart{border:0;background:none;font-size:26px;color:var(--muted)}.heart.on{color:var(--heart)}
 h2{font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:22px 0 0}
 .badge{display:inline-block;background:#26304a;border-radius:999px;padding:2px 8px;font-size:12px;margin:4px 4px 0 0}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:12px 0 2px;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid #2b3650;background:var(--card);color:var(--muted);border-radius:999px;padding:7px 14px;font-size:14px}
+.chip.on{background:var(--text);color:#0f1420;border-color:var(--text);font-weight:700}
+.strip{display:flex;gap:10px;overflow-x:auto;padding:10px 0;scrollbar-width:none}.strip::-webkit-scrollbar{display:none}
+.sug{flex:none;width:112px}.sug img,.sug .ph{width:112px;height:168px;border-radius:10px;object-fit:cover;background:#26304a;display:block}
+.sug b{display:block;font-size:13px;margin-top:6px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.sug .btn{width:100%;margin-top:4px;padding:6px 0;font-size:13px}
+h3{font-size:15px;margin:16px 0 0}
 #msg{position:fixed;left:16px;right:16px;bottom:20px;background:#26304a;border-radius:12px;padding:12px;text-align:center;opacity:0;transition:.25s;pointer-events:none}
 #msg.show{opacity:1}
 </style></head><body>
@@ -29,7 +37,11 @@ h2{font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.08
 <input type="search" id="q" placeholder="Search a show or movie to add…" autocomplete="off">
 <div id="results"></div>
 <h2>On the list</h2>
+<div class="chips" id="types"></div>
+<div class="chips" id="genres"></div>
 <div id="list"></div>
+<h2>Suggested for you</h2>
+<div id="sugs"><p style="color:var(--muted)">Finding ideas…</p></div>
 <div id="msg"></div>
 <script>
 const API = 'https://jwbzbxzgpkdyabysjmbj.supabase.co/functions/v1/watchlist';
@@ -50,20 +62,38 @@ function drawWho(){
   $('who').innerHTML = ['Andy','Brittany'].map(n=>'<button class="'+(me===n?'on':'')+'" data-n="'+n+'">'+n+'</button>').join('');
   $('who').querySelectorAll('button').forEach(b=>b.onclick=()=>{ me=b.dataset.n; localStorage.setItem('wl_me',me); drawWho(); drawList(); });
 }
-let items = [];
+let items = [], type = 'all', genre = '';
+function drawChips(){
+  const T = [['all','All'],['movie','Movies'],['tv','Shows']];
+  $('types').innerHTML = T.map(([k,l])=>'<button class="chip '+(type===k?'on':'')+'" data-k="'+k+'">'+l+'</button>').join('');
+  $('types').querySelectorAll('.chip').forEach(b=>b.onclick=()=>{ type=b.dataset.k; genre=''; drawChips(); drawList(); });
+  const pool = items.filter(i=>type==='all'||i.media_type===type);
+  const gs = [...new Set(pool.flatMap(i=>i.genres||[]))].sort();
+  $('genres').innerHTML = gs.length ? ['',...gs].map(g=>'<button class="chip '+(genre===g?'on':'')+'" data-g="'+esc(g)+'">'+(g||'Any genre')+'</button>').join('') : '';
+  $('genres').querySelectorAll('.chip').forEach(b=>b.onclick=()=>{ genre=b.dataset.g; drawChips(); drawList(); });
+}
 function drawList(){
-  $('list').innerHTML = items.length ? items.map(i=>'<div class="row">'+(i.poster?'<img src="'+i.poster+'">':'<div class="ph"></div>')+
-    '<div class="t"><b>'+esc(i.title)+'</b><small>'+esc(i.year)+' · '+(i.media_type==='tv'?'Show':'Movie')+' · added by '+esc(i.added_by)+'</small><div>'+
-    (i.providers||[]).map(p=>'<span class="badge">'+esc(p)+'</span>').join('')+'</div></div>'+
-    '<button class="heart '+(i.hearts.includes(me)?'on':'')+'" data-id="'+i.id+'">'+(i.hearts.includes(me)?'♥':'♡')+' <small>'+i.hearts.length+'</small></button></div>').join('') : '<p style="color:var(--muted)">Nothing yet. Search above to add the first one.</p>';
+  const shown = items.filter(i=>(type==='all'||i.media_type===type)&&(!genre||(i.genres||[]).includes(genre)));
+  $('list').innerHTML = shown.length ? shown.map(i=>'<div class="row">'+(i.poster?'<img src="'+i.poster+'">':'<div class="ph"></div>')+
+    '<div class="t"><b>'+esc(i.title)+'</b><small>'+esc(i.year)+' \u00b7 '+(i.media_type==='tv'?'Show':'Movie')+' \u00b7 added by '+esc(i.added_by)+'</small><div>'+
+    (i.genres||[]).slice(0,2).map(g=>'<span class="badge">'+esc(g)+'</span>').join('')+(i.providers||[]).map(p=>'<span class="badge" style="background:#1f4d49">'+esc(p)+'</span>').join('')+'</div></div>'+
+    '<button class="heart '+(i.hearts.includes(me)?'on':'')+'" data-id="'+i.id+'">'+(i.hearts.includes(me)?'\u2665':'\u2661')+' <small>'+i.hearts.length+'</small></button></div>').join('') : '<p style="color:var(--muted)">'+(items.length?'Nothing matches that filter.':'Nothing yet. Search above or add from the suggestions below.')+'</p>';
   $('list').querySelectorAll('.heart').forEach(b=>b.onclick=async()=>{ if(!me) return toast('Pick Andy or Brittany first'); await call('heart',{id:+b.dataset.id,who:me}); load(); });
 }
-async function load(){ const r = await call('list'); if (r.error) { $('list').innerHTML='<p style="color:var(--muted)">Cannot load the list ('+esc(r.error)+'). Open the link Claude gave you again.</p>'; return; } items=r.items; drawList(); }
+let sugRows = [];
+function drawSugs(){
+  const t = type;
+  const rows = sugRows.map(r=>({label:r.label,items:r.items.filter(x=>t==='all'||x.media_type===t)})).filter(r=>r.items.length);
+  $('sugs').innerHTML = rows.length ? rows.map((r,ri)=>'<h3>'+esc(r.label)+'</h3><div class="strip">'+r.items.map((x,xi)=>'<div class="sug">'+(x.poster?'<img src="'+x.poster+'">':'<div class="ph"></div>')+'<b>'+esc(x.title)+'</b><button class="btn" data-r="'+ri+'" data-x="'+xi+'">+ Add</button></div>').join('')+'</div>').join('') : '<p style="color:var(--muted)">No suggestions right now.</p>';
+  $('sugs').querySelectorAll('.btn').forEach(b=>b.onclick=async()=>{ if(!me) return toast('Pick Andy or Brittany first'); const x=rows[+b.dataset.r].items[+b.dataset.x]; b.disabled=true; b.textContent='Added'; await call('add',{tmdb_id:x.tmdb_id,media_type:x.media_type,by:me}); toast('Added '+x.title); load(); });
+}
+async function loadSugs(){ const r = await call('suggest'); sugRows = r.rows||[]; drawSugs(); }
+async function load(){ const r = await call('list'); if (r.error) { $('list').innerHTML='<p style="color:var(--muted)">Cannot load the list ('+esc(r.error)+'). Open the link Claude gave you again.</p>'; return; } items=r.items; drawChips(); drawList(); }
 let timer; $('q').oninput = () => { clearTimeout(timer); timer = setTimeout(async () => {
   const q = $('q').value.trim(); if (q.length<2) { $('results').innerHTML=''; return; }
   const r = await call('search&q='+encodeURIComponent(q)); const res = r.results||[];
   $('results').innerHTML = res.map((x,i)=>'<div class="row">'+(x.poster?'<img src="'+x.poster+'">':'<div class="ph"></div>')+'<div class="t"><b>'+esc(x.title)+'</b><small>'+esc(x.year)+' · '+(x.media_type==='tv'?'Show':'Movie')+'</small></div><button class="btn" data-i="'+i+'">Add</button></div>').join('');
-  $('results').querySelectorAll('.btn').forEach(b=>b.onclick=async()=>{ if(!me) return toast('Pick Andy or Brittany first'); const x=res[+b.dataset.i]; b.disabled=true; const a=await call('add',{tmdb_id:x.tmdb_id,media_type:x.media_type,by:me}); toast(a.status==='exists'?'Already on the list':'Added '+x.title); $('q').value=''; $('results').innerHTML=''; load(); });
+  $('results').querySelectorAll('.btn').forEach(b=>b.onclick=async()=>{ if(!me) return toast('Pick Andy or Brittany first'); const x=res[+b.dataset.i]; b.disabled=true; const a=await call('add',{tmdb_id:x.tmdb_id,media_type:x.media_type,by:me}); toast(a.status==='exists'?'Already on the list':'Added '+x.title); $('q').value=''; $('results').innerHTML=''; load(); loadSugs(); });
 }, 350); };
-drawWho(); load();
+drawWho(); load(); loadSugs();
 </script></body></html>
