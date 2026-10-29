@@ -75,7 +75,6 @@ h3{font-size:15px;margin:16px 0 0}
 <div class="chips" id="types"></div>
 <div class="chips" id="genres"></div>
 <div id="list"></div>
-<h2>Suggested for you</h2>
 <div id="sugs"><p style="color:var(--muted)">Finding ideas…</p></div>
 </div>
 <div class="match" id="match"></div>
@@ -123,8 +122,11 @@ function drawList(){
 let sugRows = [];
 function drawSugs(){
   const t = type;
-  const rows = sugRows.map(r=>({label:r.label,items:r.items.filter(x=>t==='all'||x.media_type===t)})).filter(r=>r.items.length);
-  $('sugs').innerHTML = rows.length ? rows.map((r,ri)=>'<h3>'+esc(r.label)+'</h3><div class="strip">'+r.items.map((x,xi)=>'<div class="sug"><div class="tap" data-r="'+ri+'" data-x="'+xi+'">'+(x.poster?'<img src="'+x.poster+'">':'<div class="ph"></div>')+'<b>'+esc(x.title)+'</b><small style="color:var(--accent);font-size:11px">\u25b6 Trailer & details</small></div><button class="btn" data-r="'+ri+'" data-x="'+xi+'">+ Add</button></div>').join('')+'</div>').join('') : '<p style="color:var(--muted)">No suggestions right now.</p>';
+  const rows = sugRows.map(r=>({label:r.label,group:r.group,items:r.items.filter(x=>t==='all'||x.media_type===t)})).filter(r=>r.items.length);
+  const strip=(r,ri)=>'<h3>'+esc(r.label)+'</h3><div class="strip">'+r.items.map((x,xi)=>'<div class="sug"><div class="tap" data-r="'+ri+'" data-x="'+xi+'">'+(x.poster?'<img src="'+x.poster+'">':'<div class="ph"></div>')+'<b>'+esc(x.title)+'</b><small style="color:var(--accent);font-size:11px">\u25b6 Trailer & details</small></div><button class="btn" data-r="'+ri+'" data-x="'+xi+'">+ Add</button></div>').join('')+'</div>';
+  const season=rows.map((r,i)=>r.group==='holiday'?strip(r,i):'').join('');
+  const rest=rows.map((r,i)=>r.group==='holiday'?'':strip(r,i)).join('');
+  $('sugs').innerHTML = rows.length ? (season?'<h2>In season</h2>'+season:'')+(rest?'<h2>Suggested for you</h2>'+rest:'') : '<h2>Suggested for you</h2><p style="color:var(--muted)">No suggestions right now.</p>';
   $('sugs').querySelectorAll('.tap').forEach(t=>t.onclick=()=>openDetails(rows[+t.dataset.r].items[+t.dataset.x],false));
   $('sugs').querySelectorAll('.btn').forEach(b=>b.onclick=async()=>{ if(!me) return toast('Pick Andy or Brittany first'); const x=rows[+b.dataset.r].items[+b.dataset.x]; b.disabled=true; b.textContent='Added'; await call('add',{tmdb_id:x.tmdb_id,media_type:x.media_type,by:me}); toast('Added '+x.title); load(); });
 }
@@ -133,7 +135,7 @@ async function load(){ const r = await call('list'); if (r.error) { $('list').in
 let timer; $('q').oninput = () => { clearTimeout(timer); timer = setTimeout(async () => {
   const q = $('q').value.trim(); if (q.length<2) { $('results').innerHTML=''; return; }
   const r = await call('search&q='+encodeURIComponent(q)); const res = r.results||[];
-  $('results').innerHTML = res.map((x,i)=>'<div class="row" data-si="'+i+'">'+(x.poster?'<img src="'+x.poster+'">':'<div class="ph"></div>')+'<div class="t"><b>'+esc(x.title)+'</b><small>'+esc(x.year)+' · '+(x.media_type==='tv'?'Show':'Movie')+'</small></div><button class="btn" data-i="'+i+'">Add</button></div>').join('');
+  $('results').innerHTML = res.map((x,i)=>'<div class="row" data-si="'+i+'">'+(x.poster?'<img src="'+x.poster+'">':'<div class="ph"></div>')+'<div class="t"><b>'+esc(x.title)+'</b><small>'+esc(x.year)+' · '+(x.media_type==='tv'?'Show':'Movie')+'</small></div>'+((x.providers||[]).length?'<button class="btn" data-i="'+i+'">Add</button>':'<small style="color:var(--muted);text-align:right;max-width:90px">Not on your services</small>')+'</div>').join('');
   $('results').querySelectorAll('.row[data-si]').forEach(r=>r.onclick=e=>{ if(e.target.closest('.btn')) return; openDetails(res[+r.dataset.si],false); });
   $('results').querySelectorAll('.btn').forEach(b=>b.onclick=async()=>{ if(!me) return toast('Pick Andy or Brittany first'); const x=res[+b.dataset.i]; b.disabled=true; const a=await call('add',{tmdb_id:x.tmdb_id,media_type:x.media_type,by:me}); toast(a.status==='exists'?'Already on the list':'Added '+x.title); $('q').value=''; $('results').innerHTML=''; load(); loadSugs(); });
 }, 350); };
