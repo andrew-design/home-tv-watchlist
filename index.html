@@ -60,7 +60,7 @@ h3{font-size:15px;margin:16px 0 0}
 .sheet h2{font-size:26px;text-transform:none;letter-spacing:0;color:var(--text);margin:6px 0 2px}.sheet .meta{color:var(--muted);font-size:14px}
 .sheet .tag{font-style:italic;color:#cdd5e2;margin:10px 0 0}.sheet p{color:#e3e8f1;font-size:15px}
 .vid{position:relative;padding-top:56.25%;margin:14px 0;border-radius:14px;overflow:hidden;background:#000}.vid iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
-.row[data-ix]{cursor:pointer}
+.row[data-ix],.row[data-si],.tap{cursor:pointer}.sug small{display:block;margin-top:2px}
 </style></head><body>
 <h1>⭐ Our Watchlist</h1>
 <div class="who" id="who"></div>
@@ -123,7 +123,8 @@ let sugRows = [];
 function drawSugs(){
   const t = type;
   const rows = sugRows.map(r=>({label:r.label,items:r.items.filter(x=>t==='all'||x.media_type===t)})).filter(r=>r.items.length);
-  $('sugs').innerHTML = rows.length ? rows.map((r,ri)=>'<h3>'+esc(r.label)+'</h3><div class="strip">'+r.items.map((x,xi)=>'<div class="sug">'+(x.poster?'<img src="'+x.poster+'">':'<div class="ph"></div>')+'<b>'+esc(x.title)+'</b><button class="btn" data-r="'+ri+'" data-x="'+xi+'">+ Add</button></div>').join('')+'</div>').join('') : '<p style="color:var(--muted)">No suggestions right now.</p>';
+  $('sugs').innerHTML = rows.length ? rows.map((r,ri)=>'<h3>'+esc(r.label)+'</h3><div class="strip">'+r.items.map((x,xi)=>'<div class="sug"><div class="tap" data-r="'+ri+'" data-x="'+xi+'">'+(x.poster?'<img src="'+x.poster+'">':'<div class="ph"></div>')+'<b>'+esc(x.title)+'</b><small style="color:var(--accent);font-size:11px">\u25b6 Trailer & details</small></div><button class="btn" data-r="'+ri+'" data-x="'+xi+'">+ Add</button></div>').join('')+'</div>').join('') : '<p style="color:var(--muted)">No suggestions right now.</p>';
+  $('sugs').querySelectorAll('.tap').forEach(t=>t.onclick=()=>openDetails(rows[+t.dataset.r].items[+t.dataset.x],false));
   $('sugs').querySelectorAll('.btn').forEach(b=>b.onclick=async()=>{ if(!me) return toast('Pick Andy or Brittany first'); const x=rows[+b.dataset.r].items[+b.dataset.x]; b.disabled=true; b.textContent='Added'; await call('add',{tmdb_id:x.tmdb_id,media_type:x.media_type,by:me}); toast('Added '+x.title); load(); });
 }
 async function loadSugs(){ const r = await call('suggest'); sugRows = r.rows||[]; drawSugs(); }
@@ -131,7 +132,8 @@ async function load(){ const r = await call('list'); if (r.error) { $('list').in
 let timer; $('q').oninput = () => { clearTimeout(timer); timer = setTimeout(async () => {
   const q = $('q').value.trim(); if (q.length<2) { $('results').innerHTML=''; return; }
   const r = await call('search&q='+encodeURIComponent(q)); const res = r.results||[];
-  $('results').innerHTML = res.map((x,i)=>'<div class="row">'+(x.poster?'<img src="'+x.poster+'">':'<div class="ph"></div>')+'<div class="t"><b>'+esc(x.title)+'</b><small>'+esc(x.year)+' · '+(x.media_type==='tv'?'Show':'Movie')+'</small></div><button class="btn" data-i="'+i+'">Add</button></div>').join('');
+  $('results').innerHTML = res.map((x,i)=>'<div class="row" data-si="'+i+'">'+(x.poster?'<img src="'+x.poster+'">':'<div class="ph"></div>')+'<div class="t"><b>'+esc(x.title)+'</b><small>'+esc(x.year)+' · '+(x.media_type==='tv'?'Show':'Movie')+'</small></div><button class="btn" data-i="'+i+'">Add</button></div>').join('');
+  $('results').querySelectorAll('.row[data-si]').forEach(r=>r.onclick=e=>{ if(e.target.closest('.btn')) return; openDetails(res[+r.dataset.si],false); });
   $('results').querySelectorAll('.btn').forEach(b=>b.onclick=async()=>{ if(!me) return toast('Pick Andy or Brittany first'); const x=res[+b.dataset.i]; b.disabled=true; const a=await call('add',{tmdb_id:x.tmdb_id,media_type:x.media_type,by:me}); toast(a.status==='exists'?'Already on the list':'Added '+x.title); $('q').value=''; $('results').innerHTML=''; load(); loadSugs(); });
 }, 350); };
 
